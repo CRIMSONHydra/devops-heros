@@ -1,22 +1,21 @@
-name: CD Pipeline
+name: Demo CD Pipeline
 
-# CD = Continuous Delivery/Deployment: after CI succeeds on main,
-# publish the Docker image and deploy it.
+# Runnable copy of session16-github-actions/.../11-demo-project/.github/workflows/cd.yml
 on:
   workflow_run:
-    workflows: ["CI Pipeline"]
+    workflows: ["Demo CI Pipeline"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write                   # needed to push to GHCR
-  actions: read                     # needed to download artifacts of the CI run
+  packages: write
+  actions: read
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/calculator-api  # NOTE: must be lowercase, see root demo-cd.yml
+  PROJECT_DIR: session16-github-actions/session-16-github-actions/HW
 
 jobs:
   publish-image:
@@ -25,34 +24,39 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.vars.outputs.tag }}
+      image: ${{ steps.vars.outputs.image }}
     steps:
       - name: Checkout the commit that passed CI
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - id: vars
-        run: echo "tag=$(echo ${{ github.event.workflow_run.head_sha || github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "tag=${SHA::7}" >> "$GITHUB_OUTPUT"
+          # image names must be lowercase (owner may contain capitals)
+          echo "image=${REGISTRY}/${GITHUB_REPOSITORY,,}/calculator-api" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}     # secret provided automatically
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ env.PROJECT_DIR }}
           push: true
           build-args: APP_VERSION=${{ steps.vars.outputs.tag }}
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
+            ${{ steps.vars.outputs.image }}:latest
 
   deploy:
     name: Deploy to Staging
     needs: publish-image
     runs-on: ubuntu-latest
-    environment: staging            # environment-scoped secrets and optional approvals
+    environment: staging
     steps:
       - name: Download build artifact from the CI run
         if: ${{ github.event_name == 'workflow_run' }}
@@ -67,8 +71,8 @@ jobs:
         run: cat build/build-info.txt
       - name: Deploy (simulated)
         env:
-          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}   # add under Settings > Secrets
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.publish-image.outputs.tag }}
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+          IMAGE: ${{ needs.publish-image.outputs.image }}:${{ needs.publish-image.outputs.tag }}
         run: |
           echo "Deploying $IMAGE to staging"
           if [ -z "$DEPLOY_TOKEN" ]; then echo "DEPLOY_TOKEN not set, skipping real deploy"; else echo "Using deploy token (masked in logs)"; fi
