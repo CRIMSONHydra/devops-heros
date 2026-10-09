@@ -1,35 +1,32 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Script: load_generator.sh
-# Purpose: Spawns high-concurrency background curl requests to trigger HPA scaling
+# Purpose: Runs load generator pods inside the cluster to trigger HPA scaling.
+#          Traffic goes through the Service, so it is spread across all backend pods
+#          (a local kubectl port-forward pins to one pod and is far too slow).
+# Usage:   ./load_generator.sh [target-url] [load-pods] [workers-per-pod]
 # ==============================================================================
 
 set -euo pipefail
 
-TARGET_URL="${1:-http://localhost:5000/healthz}"
+TARGET_URL="${1:-http://yatri-backend-service/}"
+LOAD_PODS="${2:-10}"
+WORKERS="${3:-20}"
+NAME="load-generator"
 
 echo "=================================================="
 echo "      KUBERNETES HPA TRAFFIC LOAD GENERATOR       "
 echo "=================================================="
-echo "Pounding target endpoint: $TARGET_URL"
-echo "Simulating traffic spike. Press Ctrl+C to stop."
+echo "Target:  $TARGET_URL"
+echo "Load:    $LOAD_PODS pods x $WORKERS workers = $((LOAD_PODS * WORKERS)) concurrent loops"
+echo "Press Ctrl+C to stop and remove the load generators."
 echo ""
 
-# Forward local port if needed
-if ! curl -s -f "$TARGET_URL" > /dev/null 2>&1; then
-    echo "Starting port-forward to yatri-backend deployment on port 5000..."
-    kubectl port-forward svc/yatri-backend-service 5000:80 > /dev/null 2>&1 &
-    PF_PID=$!
-    trap 'kill $PF_PID 2>/dev/null || true' EXIT
-    sleep 2
-fi
+trap 'echo; echo "Removing load generators..."; kubectl delete deployment "$NAME" --ignore-not-found' EXIT
 
-# Run 10 parallel background workers firing requests in an infinite loop
-for i in {1..10}; do
-    while true; do
-        curl -s "$TARGET_URL" > /dev/null || true
-    done &
-done
+kubectl delete deployment "$NAME" --ignore-not-found > /dev/null
+kubectl create deployment "$NAME" --image=busybox:1.36 --replicas="$LOAD_PODS" -- \
+    /bin/sh -c "for i in \$(seq $WORKERS); do (while true; do wget -q -O- $TARGET_URL > /dev/null 2>&1; done) & done; wait"
 
 echo "Traffic load active! In another terminal, run: kubectl get hpa -w"
-wait
+sleep infinity
