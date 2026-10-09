@@ -16,7 +16,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/calculator-api  # NOTE: must be lowercase, see root demo-cd.yml
+  IMAGE_NAME: ${{ github.repository }}/calculator-api
 
 jobs:
   publish-image:
