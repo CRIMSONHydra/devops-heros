@@ -2,13 +2,13 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: session20-mini
+  name: session20-app
   namespace: argocd
 spec:
   project: default
 
   source:
-    repoURL: https://github.com/YOUR_USERNAME/YOUR_GITOPS_REPO.git
+    repoURL: https://github.com/CRIMSONHydra/argocd-demo
     targetRevision: main
     path: app
 
