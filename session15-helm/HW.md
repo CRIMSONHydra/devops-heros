@@ -2,10 +2,6 @@
 
 ## Task 1: Helm Commands
 
-Environment: Helm `v4.3.0+gbec5b06`, minikube profile `helm-hw` (Kubernetes v1.37.0, docker driver). All outputs below are real terminal captures. Working directory: `session15-helm/hw-demo`.
-
-## 1. helm create
-
 ### helm create
 
 Scaffolds a new chart named `webapp` with a default Chart.yaml, values.yaml and starter templates (deployment, service, ingress, hpa, serviceaccount, tests).
